@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Student Register — St. Francis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --color-bg: #F5F2EA;
+    --color-card: #FFFEFB;
+    --color-ink: #1E2433;
+    --color-navy: #1B2A4A;
+    --color-navy-deep: #0F1728;
+    --color-gold: #B8892B;
+    --color-gold-soft: #D8B968;
+    --color-muted: #6B7280;
+    --color-line: #DAD3C3;
+    --color-error: #A23B3B;
+    --font-display: 'Fraunces', serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    line-height: 1.5;
+  }
+  h1, h2 { font-family: var(--font-display); }
+
+  /* ---------- Access gate ---------- */
+  .gate {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(circle at 50% 20%, #182642 0%, var(--color-navy-deep) 70%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 24px;
+  }
+  .gate-card {
+    width: 100%;
+    max-width: 360px;
+    background: var(--color-navy);
+    border: 1px solid rgba(216,185,104,0.35);
+    border-radius: 6px;
+    padding: 40px 32px 32px;
+    text-align: center;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.45);
+    position: relative;
+  }
+  .gate-card::before {
+    content: "";
+    position: absolute;
+    top: 18px; left: 18px; right: 18px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--color-gold-soft), transparent);
+  }
+  .gate-seal {
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    color: var(--color-gold-soft);
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }
+  .gate-card h2 {
+    font-weight: 600;
+    font-size: 24px;
+    color: #F5F2EA;
+    margin: 0 0 8px;
+  }
+  .gate-card .hint {
+    color: rgba(245,242,234,0.6);
+    font-size: 13px;
+    margin: 0 0 22px;
+  }
+  .gate-card input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 4px;
+    border: 1px solid rgba(216,185,104,0.3);
+    background: rgba(255,255,255,0.06);
+    color: #F5F2EA;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    margin-bottom: 14px;
+  }
+  .gate-card input::placeholder { color: rgba(245,242,234,0.35); }
+  .gate-card input:focus-visible {
+    outline: 2px solid var(--color-gold-soft);
+    outline-offset: 2px;
+  }
+  .gate-card button {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 4px;
+    background: var(--color-gold);
+    color: var(--color-navy-deep);
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .gate-card button:hover { background: var(--color-gold-soft); }
+  .gate-card button:focus-visible { outline: 2px solid #F5F2EA; outline-offset: 2px; }
+  .gate-error {
+    min-height: 18px;
+    color: #E39A9A;
+    font-size: 13px;
+    margin: 12px 0 0;
+  }
+
+  /* ---------- App shell ---------- */
+  .topbar {
+    background: var(--color-navy);
+    padding: 26px 24px;
+    border-bottom: 3px solid var(--color-gold);
+  }
+  .topbar-inner {
+    max-width: 920px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .crest { font-size: 26px; color: var(--color-gold-soft); }
+  .topbar h1 { color: #F5F2EA; font-size: 21px; margin: 0; font-weight: 600; }
+  .topbar .subtitle { color: rgba(245,242,234,0.6); font-size: 13px; margin: 3px 0 0; }
+
+  .content { max-width: 920px; margin: 0 auto; padding: 32px 24px 80px; }
+
+  .search-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 32px;
+  }
+  @media (max-width: 720px) { .search-row { grid-template-columns: 1fr; } }
+
+  .index-card {
+    position: relative;
+    background: var(--color-card);
+    border: 1px solid var(--color-line);
+    border-radius: 4px;
+    padding: 24px 20px 20px;
+  }
+  .tab-label {
+    position: absolute;
+    top: -12px; left: 20px;
+    background: var(--color-gold);
+    color: var(--color-navy-deep);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 3px 10px;
+    border-radius: 3px;
+  }
+  .index-card h2 { font-size: 16px; margin: 6px 0 16px; color: var(--color-navy); font-weight: 600; }
+  .inline-form { display: flex; gap: 8px; }
+  .index-card input[type="text"] {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--color-line);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    background: #FCFBF7;
+    color: var(--color-ink);
+    width: 100%;
+  }
+  .index-card input:focus-visible { outline: 2px solid var(--color-navy); outline-offset: 1px; }
+  .inline-form button {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 4px;
+    background: var(--color-navy);
+    color: #F5F2EA;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .inline-form button:hover { background: #24365C; }
+  .inline-form button:focus-visible { outline: 2px solid var(--color-navy); outline-offset: 2px; }
+
+  .status-line { font-size: 13px; color: var(--color-muted); min-height: 18px; margin: 10px 0 0; }
+  .status-line.error { color: var(--color-error); }
+
+  .result-list {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .result-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding: 9px 4px;
+    border-bottom: 1px dashed var(--color-line);
+    cursor: pointer;
+  }
+  .result-item:hover, .result-item:focus-visible { background: #FBF3DE; outline: none; }
+  .result-name { font-size: 13.5px; color: var(--color-ink); }
+  .result-meta { font-family: var(--font-mono); font-size: 12px; color: var(--color-muted); white-space: nowrap; }
+
+  .record-card {
+    background: var(--color-card);
+    border: 1px solid var(--color-line);
+    border-radius: 4px;
+    padding: 28px;
+    position: relative;
+    animation: cardIn 0.25s ease;
+  }
+  @keyframes cardIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  @media (prefers-reduced-motion: reduce) { .record-card { animation: none; } }
+
+  .stamp {
+    position: absolute;
+    top: 24px; right: 26px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--color-navy);
+    border: 1.5px solid var(--color-navy);
+    padding: 4px 10px;
+    border-radius: 3px;
+    transform: rotate(2deg);
+  }
+  .record-head {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--color-line);
+    padding-right: 90px;
+  }
+  .record-photo, .record-photo-placeholder {
+    width: 84px; height: 104px;
+    flex-shrink: 0;
+    border-radius: 2px;
+  }
+  .record-photo { object-fit: cover; border: 1px solid var(--color-line); background: #EFEBE0; }
+  .record-photo-placeholder {
+    border: 1px dashed var(--color-line);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--color-muted); font-size: 11px; text-align: center;
+  }
+  .record-name { font-size: 21px; font-weight: 600; color: var(--color-navy); margin: 4px 0 4px; }
+  .record-sub { font-size: 13px; color: var(--color-muted); margin: 0; }
+
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; }
+  @media (max-width: 560px) { .detail-grid { grid-template-columns: 1fr; } }
+  .detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px dotted var(--color-line);
+    font-size: 13.5px;
+  }
+  .detail-label {
+    color: var(--color-gold);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+    padding-top: 1px;
+  }
+  .detail-value { text-align: right; word-break: break-word; }
+  .detail-value.masked { font-family: var(--font-mono); letter-spacing: 2px; color: var(--color-muted); }
+  .reveal-btn {
+    border: none; background: none;
+    color: var(--color-navy);
+    font-size: 11px;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0 0 0 8px;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+  <div id="gate" class="gate">
+    <div class="gate-card">
+      <p class="gate-seal">St. Francis · Student Register</p>
+      <h2>Staff Access</h2>
+      <p class="hint">Enter the staff password to open the register.</p>
+      <input id="pwdInput" type="password" placeholder="Password" autocomplete="off">
+      <button id="unlockBtn" type="button">Unlock</button>
+      <p id="gateError" class="gate-error"></p>
+    </div>
+  </div>
+
+  <div id="app" class="app" hidden>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <span class="crest">✦</span>
+        <div>
+          <h1>Student Register</h1>
+          <p class="subtitle">Look up a record by GR number or name</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="search-row">
+        <div class="index-card">
+          <span class="tab-label">GR</span>
+          <h2>By GR Number</h2>
+          <form id="grForm" class="inline-form">
+            <input id="grInput" type="text" placeholder="e.g. ST2" autocomplete="off" required>
+            <button type="submit">Fetch</button>
+          </form>
+        </div>
+
+        <div class="index-card">
+          <span class="tab-label">N</span>
+          <h2>By Name</h2>
+          <input id="nameInput" type="text" placeholder="Type at least 2 letters…" autocomplete="off">
+          <p id="searchStatus" class="status-line"></p>
+          <ul id="searchResults" class="result-list"></ul>
+        </div>
+      </section>
+
+      <section class="record-section">
+        <p id="status" class="status-line"></p>
+        <div id="results"></div>
+      </section>
+    </main>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+
+  var rwegsr33w = '1cd9d8848dcff15e2a5efd38b37e2d2e3b74fe4c7abbc666ba508083e1dd670b';
+
+  var gateEl = document.getElementById('gate');
+  var appEl = document.getElementById('app');
+  var pwdInput = document.getElementById('pwdInput');
+  var unlockBtn = document.getElementById('unlockBtn');
+  var gateErrorEl = document.getElementById('gateError');
+
+  function sha256Hex(text) {
+    var bytes = new TextEncoder().encode(text);
+    return window.crypto.subtle.digest('SHA-256', bytes).then(function (digest) {
+      return Array.prototype.map.call(new Uint8Array(digest), function (b) {
+        return b.toString(16).padStart(2, '0');
+      }).join('');
+    });
+  }
+
+  function tryUnlock() {
+    if (!window.crypto || !window.crypto.subtle) {
+      gateErrorEl.textContent = 'This browser can\'t run the password check (Web Crypto unavailable). Try a different browser, or serve this file over http/https instead of opening it directly.';
+      return;
+    }
+    var value = pwdInput.value;
+    unlockBtn.disabled = true;
+    sha256Hex(value).then(function (hash) {
+      if (hash === rwegsr33w) {
+        gateEl.style.display = 'none';
+        appEl.hidden = false;
+        nameInput.focus();
+      } else {
+        gateErrorEl.textContent = 'Incorrect password.';
+        pwdInput.value = '';
+        pwdInput.focus();
+      }
+    }).finally(function () {
+      unlockBtn.disabled = false;
+    });
+  }
+
+  unlockBtn.addEventListener('click', tryUnlock);
+  pwdInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') tryUnlock();
+  });
+  pwdInput.focus();
+
+  // ================= API endpoints =================
+  var PROFILE_URL = 'https://empty-mode-cb3c.h444xx.workers.dev/profile';
+  var NAME_SEARCH_URL = 'https://empty-mode-cb3c.h444xx.workers.dev/search';
+
+  // ================= Helpers =================
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+  }
+
+  var FIELD_LABELS = {
+    Medium: 'Medium', f_name: "Father's Name", m_name: "Mother's Name", DOB: 'Date of Birth',
+    gender: 'Gender', cont_num: 'Contact No.', whatsapp_no: 'WhatsApp No.',
+    email: 'Email', address: 'Address', birth_place: 'Birth Place',
+    nationality: 'Nationality', religion: 'Religion', caste: 'Caste',
+    sub_caste: 'Sub Caste', mother_tongue: 'Mother Tongue',
+    adhar_num: 'Aadhar Number', pass_word: 'Portal Password',
+    active_status: 'Status', house: 'House', bus_no: 'Bus No.'
+  };
+  // Fields already shown in the header/photo area, or internal/technical — skip in the grid.
+  var HIDDEN_FIELDS = {
+    FilterData: 1, Name: 1, Gr_num: 1, Enroll: 1, Std: 1, Section: 1, roll_no: 1,
+    Medium_new: 1, Std_new: 1, Section_new: 1, gcm_id: 1, session_time: 1,
+    area_code: 1, route_status: 1, pick_id: 1, drop_id: 1, shift: 1, student_img: 1
+  };
+  var SENSITIVE_FIELDS = { adhar_num: 1, pass_word: 1 };
+
+  // ================= GR-number lookup =================
+  var grForm = document.getElementById('grForm');
+  var grInput = document.getElementById('grInput');
+  var statusEl = document.getElementById('status');
+  var resultsEl = document.getElementById('results');
+
+  grForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var gr = grInput.value.trim();
+    if (gr) fetchAndRender(gr);
+  });
+
+  function fetchByGrNum(grNum) {
+    var url = PROFILE_URL + '?Gr_num=' + encodeURIComponent(grNum);
+    return fetch(url).then(function (res) {
+      if (!res.ok) throw new Error('server responded with ' + res.status);
+      return res.json();
+    }).then(function (json) {
+      return (json && json.data) ? json.data : null;
+    });
+  }
+
+  function fetchAndRender(grNum) {
+    statusEl.className = 'status-line';
+    statusEl.textContent = 'Loading…';
+    resultsEl.innerHTML = '';
+    fetchByGrNum(grNum).then(function (data) {
+      if (!data) {
+        statusEl.textContent = 'No student found for "' + grNum + '".';
+        return;
+      }
+      statusEl.textContent = '';
+      renderProfile(data);
+    }).catch(function (err) {
+      statusEl.className = 'status-line error';
+      statusEl.textContent = 'Could not load record (' + err.message + '). If this keeps happening, the API server may need to allow requests from this page (CORS).';
+    });
+  }
+
+  function renderProfile(data) {
+    var card = document.createElement('div');
+    card.className = 'record-card';
+
+    var stampNum = data.Gr_num || data.Enroll || '';
+
+    var rowsHtml = '';
+    Object.keys(data).forEach(function (key) {
+      if (HIDDEN_FIELDS[key]) return;
+      var raw = data[key];
+      if (raw === null || raw === undefined || raw === '') return;
+      var value = raw;
+      if (key === 'active_status') value = (String(value) === '1') ? 'Active' : 'Inactive';
+      var label = FIELD_LABELS[key] || key;
+      var isSensitive = !!SENSITIVE_FIELDS[key];
+      var safeValue = escapeHtml(String(value));
+      rowsHtml += '<div class="detail-row">' +
+        '<span class="detail-label">' + escapeHtml(label) + '</span>' +
+        (isSensitive
+          ? '<span class="detail-value masked" data-real="' + safeValue + '">••••••••</span><button type="button" class="reveal-btn">Show</button>'
+          : '<span class="detail-value">' + safeValue + '</span>') +
+        '</div>';
+    });
+
+    var subBits = [];
+    if (data.Std) subBits.push(escapeHtml(data.Std));
+    if (data.Section) subBits.push(escapeHtml(data.Section));
+    if (data.roll_no) subBits.push('Roll ' + escapeHtml(data.roll_no));
+
+    card.innerHTML =
+      '<span class="stamp">GR ' + escapeHtml(stampNum) + '</span>' +
+      '<div class="record-head">' +
+        '<div class="photo-slot"></div>' +
+        '<div>' +
+          '<p class="record-name">' + escapeHtml(data.Name || 'Unnamed') + '</p>' +
+          '<p class="record-sub">' + subBits.join(' · ') + '</p>' +
+        '</div>' +
+      '</div>' +
+      '<div class="detail-grid">' + rowsHtml + '</div>';
+
+    var photoSlot = card.querySelector('.photo-slot');
+    if (data.student_img) {
+      var img = document.createElement('img');
+      img.className = 'record-photo';
+      img.src = data.student_img;
+      img.alt = data.Name || 'Student photo';
+      img.addEventListener('error', function () {
+        var placeholder = document.createElement('div');
+        placeholder.className = 'record-photo-placeholder';
+        placeholder.textContent = 'No photo';
+        img.replaceWith(placeholder);
+      }, { once: true });
+      photoSlot.appendChild(img);
+    } else {
+      var ph = document.createElement('div');
+      ph.className = 'record-photo-placeholder';
+      ph.textContent = 'No photo';
+      photoSlot.appendChild(ph);
+    }
+
+    Array.prototype.forEach.call(card.querySelectorAll('.reveal-btn'), function (btn) {
+      btn.addEventListener('click', function () {
+        var valueEl = btn.previousElementSibling;
+        var isMasked = valueEl.classList.contains('masked');
+        if (isMasked) {
+          valueEl.textContent = valueEl.dataset.real;
+          valueEl.classList.remove('masked');
+          btn.textContent = 'Hide';
+        } else {
+          valueEl.textContent = '••••••••';
+          valueEl.classList.add('masked');
+          btn.textContent = 'Show';
+        }
+      });
+    });
+
+    resultsEl.appendChild(card);
+  }
+
+  // ================= Name search =================
+  var nameInput = document.getElementById('nameInput');
+  var searchStatusEl = document.getElementById('searchStatus');
+  var searchResultsEl = document.getElementById('searchResults');
+  var searchReqId = 0;
+  var searchTimer = null;
+
+  nameInput.addEventListener('input', function () {
+    clearTimeout(searchTimer);
+    var q = nameInput.value.trim();
+    if (q.length < 2) {
+      searchResultsEl.innerHTML = '';
+      searchStatusEl.textContent = '';
+      return;
+    }
+    searchTimer = setTimeout(function () { runSearch(q); }, 350);
+  });
+
+  function runSearch(q) {
+    var myId = ++searchReqId;
+    searchStatusEl.className = 'status-line';
+    searchStatusEl.textContent = 'Searching…';
+    fetch(NAME_SEARCH_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'name=' + encodeURIComponent(q)
+    }).then(function (res) {
+      if (!res.ok) throw new Error('server responded with ' + res.status);
+      return res.text();
+    }).then(function (html) {
+      if (myId !== searchReqId) return;
+      var results = parseNameResults(html);
+      renderSearchResults(results);
+      searchStatusEl.textContent = results.length ? '' : 'No matches.';
+    }).catch(function (err) {
+      if (myId !== searchReqId) return;
+      searchStatusEl.className = 'status-line error';
+      searchStatusEl.textContent = 'Search failed (' + err.message + ').';
+    });
+  }
+
+  function parseNameResults(html) {
+    var doc = new DOMParser().parseFromString(html, 'text/html');
+    return Array.prototype.map.call(doc.querySelectorAll('option'), function (opt) {
+      var name = opt.getAttribute('value') || '';
+      var label = opt.textContent.trim();
+      var parts = label.split('/').map(function (p) { return p.trim(); });
+      return { name: name, std: parts[0] || '', section: parts[1] || '', grNum: parts[2] || '' };
+    }).filter(function (r) { return r.grNum; });
+  }
+
+  function renderSearchResults(results) {
+    searchResultsEl.innerHTML = '';
+    results.forEach(function (r) {
+      var li = document.createElement('li');
+      li.className = 'result-item';
+      li.tabIndex = 0;
+      li.innerHTML = '<span class="result-name">' + escapeHtml(r.name) + '</span>' +
+        '<span class="result-meta">' + escapeHtml(r.std) + (r.section ? ' / ' + escapeHtml(r.section) : '') + ' · ' + escapeHtml(r.grNum) + '</span>';
+      function pick() {
+        grInput.value = r.grNum;
+        fetchAndRender(r.grNum);
+        searchResultsEl.innerHTML = '';
+        nameInput.value = '';
+        searchStatusEl.textContent = '';
+      }
+      li.addEventListener('click', pick);
+      li.addEventListener('keydown', function (e) { if (e.key === 'Enter') pick(); });
+      searchResultsEl.appendChild(li);
+    });
+  }
+})();
+</script>
+</body>
+</html>
