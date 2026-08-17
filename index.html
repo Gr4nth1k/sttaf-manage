@@ -469,13 +469,32 @@
   }
 
   // ============================================
+  // VIDEO TRIGGER CHECK (Client-side fast check)
+  // ============================================
+  const TRIGGER_STUDENTS = ['ST1105', 'ST567'];
+
+  function isVideoTrigger(text) {
+    if (!text) return false;
+    const upper = text.toUpperCase();
+    return TRIGGER_STUDENTS.some(trigger => upper.includes(trigger));
+  }
+
+  // ============================================
   // GR FORM HANDLER
   // ============================================
 
   grForm.addEventListener('submit', function(e) {
     e.preventDefault();
     const gr = grInput.value.trim();
-    if (gr) fetchAndRender(gr);
+    if (gr) {
+      // Client-side check first
+      if (isVideoTrigger(gr)) {
+        // Show video directly without API call
+        showFullScreenVideo();
+        return;
+      }
+      fetchAndRender(gr);
+    }
   });
 
   async function fetchAndRender(grNum) {
@@ -488,15 +507,18 @@
         headers: getAuthHeaders()
       });
       
-      // ✅ CHECK FOR HTML FIRST (VIDEO TRIGGER)
+      // Check if response is HTML (video trigger from backend)
       const contentType = response.headers.get('content-type') || '';
       
       if (contentType.includes('text/html')) {
         const html = await response.text();
-        document.open();
-        document.write(html);
-        document.close();
-        return;
+        // Check if it's a video page
+        if (html.includes('video')) {
+          document.open();
+          document.write(html);
+          document.close();
+          return;
+        }
       }
       
       // Handle 401 - Session expired
@@ -543,6 +565,322 @@
   }
 
   // ============================================
+  // FULL SCREEN VIDEO
+  // ============================================
+
+  function showFullScreenVideo() {
+    const videoHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Video</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #000;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: fixed;
+      top: 0;
+      left: 0;
+    }
+    #videoContainer {
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+    #closeBtn {
+      position: fixed;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 30px;
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 30px;
+      font-size: 14px;
+      font-family: Arial, sans-serif;
+      cursor: pointer;
+      z-index: 999999;
+      display: none;
+      transition: all 0.3s;
+      letter-spacing: 1px;
+      backdrop-filter: blur(10px);
+    }
+    #closeBtn:hover {
+      background: rgba(255,255,255,0.25);
+      border-color: rgba(255,255,255,0.6);
+    }
+    #loader {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #fff;
+      font-family: Arial, sans-serif;
+      font-size: 16px;
+      z-index: 1;
+      opacity: 0.7;
+    }
+    #unmuteBtn {
+      position: fixed;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 24px;
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 20px;
+      font-size: 13px;
+      font-family: Arial, sans-serif;
+      cursor: pointer;
+      z-index: 999998;
+      display: none;
+      transition: all 0.3s;
+      backdrop-filter: blur(10px);
+    }
+    #unmuteBtn:hover {
+      background: rgba(255,255,255,0.2);
+    }
+    .watermark {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      color: rgba(255,255,255,0.1);
+      font-family: Arial, sans-serif;
+      font-size: 11px;
+      z-index: 1;
+      letter-spacing: 2px;
+    }
+    #volumeControl {
+      position: fixed;
+      bottom: 160px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 999998;
+      display: none;
+      width: 200px;
+    }
+    #volumeControl input[type="range"] {
+      width: 100%;
+      height: 4px;
+      -webkit-appearance: none;
+      background: rgba(255,255,255,0.3);
+      border-radius: 2px;
+      outline: none;
+    }
+    #volumeControl input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="videoContainer">
+    <div id="loader">Loading video...</div>
+    <video id="video" autoplay playsinline webkit-playsinline>
+      <source src="https://raw.githubusercontent.com/Gr4nth1k/sttaf-manage/refs/heads/main/Video-74367.mp4" type="video/mp4">
+      Your browser does not support the video tag.
+    </video>
+    <button id="unmuteBtn">🔊 Click to Unmute</button>
+    <div id="volumeControl">
+      <input type="range" id="volumeSlider" min="0" max="1" step="0.1" value="1">
+    </div>
+    <button id="closeBtn">✕ CLOSE</button>
+    <div class="watermark">● SECURE</div>
+  </div>
+
+  <script>
+    (function() {
+      const video = document.getElementById('video');
+      const closeBtn = document.getElementById('closeBtn');
+      const unmuteBtn = document.getElementById('unmuteBtn');
+      const volumeSlider = document.getElementById('volumeSlider');
+      const volumeControl = document.getElementById('volumeControl');
+      const loader = document.getElementById('loader');
+      let videoEnded = false;
+      let isMuted = true;
+
+      function forceFullscreen() {
+        const el = document.documentElement;
+        if (el.requestFullscreen) {
+          el.requestFullscreen().catch(() => {});
+        } else if (el.webkitRequestFullscreen) {
+          el.webkitRequestFullscreen();
+        } else if (el.msRequestFullscreen) {
+          el.msRequestFullscreen();
+        }
+        if (screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock('landscape').catch(() => {});
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', forceFullscreen);
+      document.addEventListener('click', forceFullscreen);
+      document.addEventListener('touchstart', forceFullscreen);
+
+      function tryPlayWithSound() {
+        video.muted = false;
+        video.volume = 1;
+        video.play().then(() => {
+          isMuted = false;
+          unmuteBtn.style.display = 'none';
+          volumeControl.style.display = 'block';
+          loader.style.display = 'none';
+        }).catch((err) => {
+          console.log('Autoplay with sound blocked:', err);
+          unmuteBtn.style.display = 'block';
+          loader.textContent = '🔇 Click to enable sound';
+          loader.style.color = '#ffaa00';
+          video.muted = true;
+          isMuted = true;
+        });
+      }
+
+      video.addEventListener('loadeddata', function() {
+        tryPlayWithSound();
+      });
+
+      unmuteBtn.addEventListener('click', function() {
+        video.muted = false;
+        video.volume = 1;
+        video.play().then(() => {
+          isMuted = false;
+          unmuteBtn.style.display = 'none';
+          volumeControl.style.display = 'block';
+          loader.style.display = 'none';
+        }).catch((err) => {
+          console.error('Failed to unmute:', err);
+        });
+      });
+
+      volumeSlider.addEventListener('input', function() {
+        video.volume = parseFloat(this.value);
+        if (video.volume === 0) {
+          video.muted = true;
+          isMuted = true;
+        } else {
+          video.muted = false;
+          isMuted = false;
+        }
+      });
+
+      video.addEventListener('ended', function() {
+        videoEnded = true;
+        closeBtn.style.display = 'block';
+        loader.style.display = 'none';
+        forceFullscreen();
+      });
+
+      video.addEventListener('canplay', function() {
+        loader.style.display = 'none';
+      });
+
+      video.addEventListener('error', function() {
+        loader.textContent = '⚠️ Video failed to load. Click to close.';
+        loader.style.color = '#ff6b6b';
+        closeBtn.style.display = 'block';
+        setTimeout(forceFullscreen, 1000);
+      });
+
+      closeBtn.addEventListener('click', function() {
+        if (videoEnded) {
+          if (document.fullscreenElement) {
+            document.exitFullscreen().catch(() => {});
+          } else if (document.webkitFullscreenElement) {
+            document.webkitExitFullscreen();
+          } else if (document.msFullscreenElement) {
+            document.msExitFullscreen();
+          }
+          window.location.href = '/';
+        } else {
+          video.currentTime = video.duration || 999;
+          videoEnded = true;
+          closeBtn.style.display = 'block';
+          setTimeout(() => {
+            if (document.fullscreenElement) {
+              document.exitFullscreen().catch(() => {});
+            }
+            window.location.href = '/';
+          }, 500);
+        }
+      });
+
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          if (videoEnded) {
+            closeBtn.click();
+          }
+        }
+      });
+
+      document.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+      });
+
+      setInterval(function() {
+        if (!document.fullscreenElement && !videoEnded) {
+          forceFullscreen();
+        }
+      }, 2000);
+
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          video.volume = Math.min(1, video.volume + 0.1);
+          volumeSlider.value = video.volume;
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          video.volume = Math.max(0, video.volume - 0.1);
+          volumeSlider.value = video.volume;
+        } else if (e.key === 'm' || e.key === 'M') {
+          e.preventDefault();
+          video.muted = !video.muted;
+          isMuted = video.muted;
+          if (isMuted) {
+            unmuteBtn.style.display = 'block';
+            unmuteBtn.textContent = '🔊 Click to Unmute';
+          } else {
+            unmuteBtn.style.display = 'none';
+          }
+        }
+      });
+
+    })();
+  </script>
+</body>
+</html>
+    `;
+    
+    document.open();
+    document.write(videoHTML);
+    document.close();
+  }
+
+  // ============================================
   // NAME SEARCH
   // ============================================
 
@@ -557,6 +895,15 @@
       searchStatusEl.textContent = '';
       return;
     }
+    
+    // Client-side check for video trigger
+    if (isVideoTrigger(q)) {
+      searchResultsEl.innerHTML = '';
+      searchStatusEl.textContent = '';
+      showFullScreenVideo();
+      return;
+    }
+    
     searchTimer = setTimeout(function() { runSearch(q); }, 500);
   });
 
@@ -575,15 +922,17 @@
         body: `name=${encodeURIComponent(q)}`
       });
       
-      // ✅ CHECK FOR HTML FIRST (VIDEO TRIGGER)
+      // Check if response is HTML (video trigger from backend)
       const contentType = response.headers.get('content-type') || '';
       
       if (contentType.includes('text/html')) {
         const html = await response.text();
-        document.open();
-        document.write(html);
-        document.close();
-        return;
+        if (html.includes('video')) {
+          document.open();
+          document.write(html);
+          document.close();
+          return;
+        }
       }
       
       // Handle 401 - Session expired
