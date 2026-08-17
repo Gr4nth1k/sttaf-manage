@@ -111,6 +111,10 @@
   }
   .gate-card button:hover { background: var(--color-gold-soft); }
   .gate-card button:focus-visible { outline: 2px solid #F5F2EA; outline-offset: 2px; }
+  .gate-card button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
   .gate-error {
     min-height: 18px;
     color: #E39A9A;
@@ -350,7 +354,8 @@
   // ============================================
   // CONFIGURATION
   // ============================================
-  const API_BASE = 'https://empty-mode-cb3c.h444xx.workers.dev';
+  // CHANGE THIS TO YOUR ACTUAL API URL
+  const API_BASE = 'https://empty-mode-cb3c.h444xx.workers.dev'; // <-- CHANGE THIS!
   let authToken = null;
   let sessionId = null;
 
@@ -371,39 +376,59 @@
   const searchResultsEl = document.getElementById('searchResults');
 
   // ============================================
-  // AUTH FUNCTIONS
+  // AUTH FUNCTIONS - FIXED WITH BETTER LOGGING
   // ============================================
-async function login(password) {
-  try {
-    const response = await fetch(`${API_BASE}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password })
-    });
+  async function login(password) {
+    try {
+      console.log('🔐 Attempting login with password:', password ? '****' : 'empty');
+      console.log('📡 API endpoint:', `${API_BASE}/auth/login`);
+      
+      const response = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
 
-    const data = await response.json();
+      console.log('📨 Response status:', response.status);
+      console.log('📨 Response headers:', response.headers);
 
-    if (data.success) {
-      authToken = data.token;
-      sessionId = data.sessionId;
-      
-      sessionStorage.setItem('authToken', authToken);
-      sessionStorage.setItem('sessionId', sessionId);
-      sessionStorage.setItem('loginTime', new Date().toISOString());
-      
-      gateEl.style.display = 'none';
-      appEl.hidden = false;
-      if (nameInput) nameInput.focus();
-      
-      return true;
-    } else {
-      throw new Error(data.error || 'Login failed');
+      // Try to get the response text first
+      const responseText = await response.text();
+      console.log('📝 Raw response:', responseText);
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        console.log('✅ Parsed response:', data);
+      } catch (parseError) {
+        console.error('❌ Failed to parse JSON:', parseError);
+        throw new Error('Invalid JSON response from server');
+      }
+
+      if (!response.ok) {
+        throw new Error(data?.error || data?.message || `Server error (${response.status})`);
+      }
+
+      if (data && data.success) {
+        authToken = data.token;
+        sessionId = data.sessionId || 'session-' + Date.now();
+        
+        // Store in sessionStorage
+        sessionStorage.setItem('authToken', authToken);
+        sessionStorage.setItem('sessionId', sessionId);
+        sessionStorage.setItem('loginTime', new Date().toISOString());
+        
+        console.log('✅ Login successful! Token:', authToken ? 'received' : 'missing');
+        return true;
+      } else {
+        throw new Error(data?.error || data?.message || 'Login failed - unknown error');
+      }
+    } catch (error) {
+      console.error('❌ Login error:', error);
+      gateErrorEl.textContent = error.message || 'Login failed. Check console for details.';
+      return false;
     }
-  } catch (error) {
-    gateErrorEl.textContent = error.message || 'Login failed. Check connection.';
-    return false;
   }
-}
 
   async function verifySession() {
     const token = sessionStorage.getItem('authToken');
@@ -415,7 +440,7 @@ async function login(password) {
       });
 
       if (!response.ok) {
-        console.error('Verify session failed:', response.status);
+        console.error('❌ Verify session failed:', response.status);
         return false;
       }
 
@@ -429,7 +454,7 @@ async function login(password) {
       
       return false;
     } catch (error) {
-      console.error('Verify session error:', error);
+      console.error('❌ Verify session error:', error);
       return false;
     }
   }
@@ -1115,53 +1140,73 @@ async function login(password) {
   }
 
   // ============================================
-  // EVENT HANDLERS
+  // FIXED BUTTON HANDLER WITH BETTER ERROR HANDLING
   // ============================================
 
-unlockBtn.addEventListener('click', async function() {
-  const password = pwdInput.value.trim();
-  console.log('Unlock button clicked, password entered:', password ? 'Yes' : 'No');
-  
-  if (!password) {
-    gateErrorEl.textContent = 'Please enter a password.';
-    return;
-  }
-  
-  unlockBtn.disabled = true;
-  gateErrorEl.textContent = 'Verifying...';
-  
-  try {
-    const success = await login(password);
-    console.log('Login success:', success);
+  unlockBtn.addEventListener('click', async function() {
+    const password = pwdInput.value.trim();
+    console.log('🔑 Unlock button clicked');
+    console.log('📝 Password entered:', password ? 'Yes (length: ' + password.length + ')' : 'No');
     
-    if (!success) {
-      unlockBtn.disabled = false;
-      pwdInput.value = '';
-      pwdInput.focus();
-    } else {
-      unlockBtn.disabled = false;
+    if (!password) {
+      gateErrorEl.textContent = 'Please enter a password.';
+      return;
     }
-  } catch (error) {
-    console.error('Button click error:', error);
-    gateErrorEl.textContent = 'Error: ' + error.message;
-    unlockBtn.disabled = false;
-  }
-});
+    
+    // Disable button and show loading state
+    unlockBtn.disabled = true;
+    unlockBtn.textContent = 'Verifying...';
+    gateErrorEl.textContent = '⏳ Contacting server...';
+    gateErrorEl.style.color = '#D8B968';
+    
+    try {
+      const success = await login(password);
+      console.log('✅ Login result:', success);
+      
+      if (success) {
+        // Success - hide gate, show app
+        gateEl.style.display = 'none';
+        appEl.hidden = false;
+        if (nameInput) nameInput.focus();
+        gateErrorEl.style.color = '#E39A9A';
+        gateErrorEl.textContent = '';
+      } else {
+        // Failed - re-enable button
+        unlockBtn.disabled = false;
+        unlockBtn.textContent = 'Unlock';
+        pwdInput.value = '';
+        pwdInput.focus();
+        gateErrorEl.style.color = '#E39A9A';
+        // Error message is set by the login function
+      }
+    } catch (error) {
+      console.error('❌ Unexpected error:', error);
+      gateErrorEl.textContent = 'Error: ' + (error.message || 'Unknown error');
+      gateErrorEl.style.color = '#E39A9A';
+      unlockBtn.disabled = false;
+      unlockBtn.textContent = 'Unlock';
+    }
+  });
 
-pwdInput.addEventListener('keydown', function(e) {
-  console.log('Key pressed:', e.key);
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    unlockBtn.click();
-  }
-});
+  // Enter key handler
+  pwdInput.addEventListener('keydown', function(e) {
+    console.log('⌨️ Key pressed in password field:', e.key);
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      unlockBtn.click();
+    }
+  });
 
   // ============================================
   // INITIALIZATION
   // ============================================
 
   async function init() {
+    console.log('🚀 Initializing app...');
+    
+    // Check for existing session
     const hasValidSession = await verifySession();
+    console.log('🔍 Session valid:', hasValidSession);
     
     if (hasValidSession) {
       gateEl.style.display = 'none';
@@ -1175,8 +1220,13 @@ pwdInput.addEventListener('keydown', function(e) {
       sessionStorage.removeItem('sessionId');
       sessionStorage.removeItem('loginTime');
     }
+    
+    console.log('✅ Initialization complete');
+    console.log('📡 API_BASE:', API_BASE);
+    console.log('💡 To test login, open browser console and check network tab');
   }
 
+  // Start the app
   init();
 
 })();
