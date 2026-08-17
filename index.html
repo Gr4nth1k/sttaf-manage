@@ -373,57 +373,37 @@
   // ============================================
   // AUTH FUNCTIONS
   // ============================================
+async function login(password) {
+  try {
+    const response = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
 
-  async function login(password) {
-    try {
-      gateErrorEl.textContent = 'Connecting to server...';
+    const data = await response.json();
+
+    if (data.success) {
+      authToken = data.token;
+      sessionId = data.sessionId;
       
-      const response = await fetch(`${API_BASE}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
-      });
-
-      // Check if response is OK
-      if (!response.ok) {
-        const text = await response.text();
-        console.error('Login response not OK:', response.status, text);
-        throw new Error(`Server error: ${response.status}`);
-      }
-
-      // Check if response is JSON
-      const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('Login response not JSON:', text);
-        throw new Error('Server returned invalid response');
-      }
-
-      const data = await response.json();
-      console.log('Login response:', data);
-
-      if (data.success) {
-        authToken = data.token;
-        sessionId = data.sessionId;
-        
-        sessionStorage.setItem('authToken', authToken);
-        sessionStorage.setItem('sessionId', sessionId);
-        sessionStorage.setItem('loginTime', new Date().toISOString());
-        
-        gateEl.style.display = 'none';
-        appEl.hidden = false;
-        if (nameInput) nameInput.focus();
-        
-        return true;
-      } else {
-        throw new Error(data.error || 'Login failed');
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      gateErrorEl.textContent = error.message || 'Login failed. Check connection.';
-      return false;
+      sessionStorage.setItem('authToken', authToken);
+      sessionStorage.setItem('sessionId', sessionId);
+      sessionStorage.setItem('loginTime', new Date().toISOString());
+      
+      gateEl.style.display = 'none';
+      appEl.hidden = false;
+      if (nameInput) nameInput.focus();
+      
+      return true;
+    } else {
+      throw new Error(data.error || 'Login failed');
     }
+  } catch (error) {
+    gateErrorEl.textContent = error.message || 'Login failed. Check connection.';
+    return false;
   }
+}
 
   async function verifySession() {
     const token = sessionStorage.getItem('authToken');
@@ -1138,17 +1118,21 @@
   // EVENT HANDLERS
   // ============================================
 
-  unlockBtn.addEventListener('click', async function() {
-    const password = pwdInput.value.trim();
-    if (!password) {
-      gateErrorEl.textContent = 'Please enter a password.';
-      return;
-    }
-    
-    unlockBtn.disabled = true;
-    gateErrorEl.textContent = 'Verifying...';
-    
+unlockBtn.addEventListener('click', async function() {
+  const password = pwdInput.value.trim();
+  console.log('Unlock button clicked, password entered:', password ? 'Yes' : 'No');
+  
+  if (!password) {
+    gateErrorEl.textContent = 'Please enter a password.';
+    return;
+  }
+  
+  unlockBtn.disabled = true;
+  gateErrorEl.textContent = 'Verifying...';
+  
+  try {
     const success = await login(password);
+    console.log('Login success:', success);
     
     if (!success) {
       unlockBtn.disabled = false;
@@ -1157,13 +1141,20 @@
     } else {
       unlockBtn.disabled = false;
     }
-  });
+  } catch (error) {
+    console.error('Button click error:', error);
+    gateErrorEl.textContent = 'Error: ' + error.message;
+    unlockBtn.disabled = false;
+  }
+});
 
-  pwdInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
-      unlockBtn.click();
-    }
-  });
+pwdInput.addEventListener('keydown', function(e) {
+  console.log('Key pressed:', e.key);
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    unlockBtn.click();
+  }
+});
 
   // ============================================
   // INITIALIZATION
