@@ -396,8 +396,6 @@
         appEl.hidden = false;
         if (nameInput) nameInput.focus();
         
-        setTimeout(refreshToken, 30 * 60 * 1000);
-        
         return true;
       } else {
         throw new Error(data.error || 'Login failed');
@@ -431,7 +429,7 @@
     }
   }
 
-  async function logout() {
+  async function logout(showMessage = true) {
     if (authToken) {
       try {
         await fetch(`${API_BASE}/auth/logout`, {
@@ -453,13 +451,8 @@
     appEl.hidden = true;
     pwdInput.value = '';
     pwdInput.focus();
-  }
-
-  async function refreshToken() {
-    if (!authToken) return;
-    const valid = await verifySession();
-    if (!valid) {
-      await logout();
+    
+    if (showMessage) {
       gateErrorEl.textContent = 'Session expired. Please login again.';
     }
   }
@@ -495,16 +488,10 @@
         headers: getAuthHeaders()
       });
       
-      if (response.status === 401) {
-        await logout();
-        throw new Error('Session expired. Please login again.');
-      }
-      
       // Check if response is HTML (video trigger)
       const contentType = response.headers.get('content-type') || '';
       
       if (contentType.includes('text/html')) {
-        // This is the video page - replace entire page
         const html = await response.text();
         document.open();
         document.write(html);
@@ -512,7 +499,21 @@
         return;
       }
       
-      // Parse as JSON
+      // Handle 401 - Session expired
+      if (response.status === 401) {
+        // Try to refresh the session
+        const refreshed = await verifySession();
+        if (refreshed) {
+          // Retry the request
+          return fetchAndRender(grNum);
+        } else {
+          await logout(true);
+          return;
+        }
+      }
+      
+      if (!response.ok) throw new Error('API error: ' + response.status);
+      
       const data = await response.json();
       
       if (!data || !data.data) {
@@ -522,9 +523,13 @@
       statusEl.textContent = '';
       renderProfile(data.data);
     } catch (error) {
-      if (error.message.includes('Session expired')) {
-        statusEl.className = 'status-line error';
-        statusEl.textContent = 'Session expired. Please refresh and login again.';
+      if (error.message.includes('401')) {
+        const refreshed = await verifySession();
+        if (refreshed) {
+          return fetchAndRender(grNum);
+        } else {
+          await logout(true);
+        }
       } else {
         statusEl.className = 'status-line error';
         statusEl.textContent = 'Could not load record (' + error.message + ').';
@@ -547,7 +552,7 @@
       searchStatusEl.textContent = '';
       return;
     }
-    searchTimer = setTimeout(function() { runSearch(q); }, 350);
+    searchTimer = setTimeout(function() { runSearch(q); }, 500);
   });
 
   async function runSearch(q) {
@@ -565,21 +570,27 @@
         body: `name=${encodeURIComponent(q)}`
       });
       
-      if (response.status === 401) {
-        await logout();
-        throw new Error('Session expired. Please login again.');
-      }
-      
       // Check if response is HTML (video trigger)
       const contentType = response.headers.get('content-type') || '';
       
       if (contentType.includes('text/html')) {
-        // This is the video page - replace entire page
         const html = await response.text();
         document.open();
         document.write(html);
         document.close();
         return;
+      }
+      
+      // Handle 401 - Session expired
+      if (response.status === 401) {
+        const refreshed = await verifySession();
+        if (refreshed) {
+          // Retry the search
+          return runSearch(q);
+        } else {
+          await logout(true);
+          return;
+        }
       }
       
       if (!response.ok) throw new Error('API error: ' + response.status);
@@ -592,8 +603,18 @@
       searchStatusEl.textContent = results.length ? '' : 'No matches.';
     } catch (error) {
       if (myId !== searchReqId) return;
-      searchStatusEl.className = 'status-line error';
-      searchStatusEl.textContent = 'Search failed (' + error.message + ').';
+      
+      if (error.message.includes('401')) {
+        const refreshed = await verifySession();
+        if (refreshed) {
+          return runSearch(q);
+        } else {
+          await logout(true);
+        }
+      } else {
+        searchStatusEl.className = 'status-line error';
+        searchStatusEl.textContent = 'Search failed (' + error.message + ').';
+      }
     }
   }
 
@@ -736,6 +757,37 @@
   }
 
   // ============================================
+  // EVENT HANDLERS
+  // ============================================
+
+  unlockBtn.addEventListener('click', async function() {
+    const password = pwdInput.value.trim();
+    if (!password) {
+      gateErrorEl.textContent = 'Please enter a password.';
+      return;
+    }
+    
+    unlockBtn.disabled = true;
+    gateErrorEl.textContent = 'Verifying...';
+    
+    const success = await login(password);
+    
+    if (!success) {
+      unlockBtn.disabled = false;
+      pwdInput.value = '';
+      pwdInput.focus();
+    } else {
+      unlockBtn.disabled = false;
+    }
+  });
+
+  pwdInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      unlockBtn.click();
+    }
+  });
+
+  // ============================================
   // INITIALIZATION
   // ============================================
 
@@ -746,11 +798,14 @@
       gateEl.style.display = 'none';
       appEl.hidden = false;
       if (nameInput) nameInput.focus();
-      setTimeout(refreshToken, 30 * 60 * 1000);
     } else {
       gateEl.style.display = 'flex';
       appEl.hidden = true;
       pwdInput.focus();
+      // Clear any stale session data
+      sessionStorage.removeItem('authToken');
+      sessionStorage.removeItem('sessionId');
+      sessionStorage.removeItem('loginTime');
     }
   }
 
