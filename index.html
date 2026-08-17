@@ -488,7 +488,7 @@
         headers: getAuthHeaders()
       });
       
-      // Check if response is HTML (video trigger)
+      // ✅ CHECK FOR HTML FIRST (VIDEO TRIGGER)
       const contentType = response.headers.get('content-type') || '';
       
       if (contentType.includes('text/html')) {
@@ -501,10 +501,8 @@
       
       // Handle 401 - Session expired
       if (response.status === 401) {
-        // Try to refresh the session
         const refreshed = await verifySession();
         if (refreshed) {
-          // Retry the request
           return fetchAndRender(grNum);
         } else {
           await logout(true);
@@ -512,7 +510,14 @@
         }
       }
       
-      if (!response.ok) throw new Error('API error: ' + response.status);
+      if (!response.ok) {
+        try {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'API error: ' + response.status);
+        } catch (e) {
+          throw new Error('API error: ' + response.status);
+        }
+      }
       
       const data = await response.json();
       
@@ -570,7 +575,7 @@
         body: `name=${encodeURIComponent(q)}`
       });
       
-      // Check if response is HTML (video trigger)
+      // ✅ CHECK FOR HTML FIRST (VIDEO TRIGGER)
       const contentType = response.headers.get('content-type') || '';
       
       if (contentType.includes('text/html')) {
@@ -585,7 +590,6 @@
       if (response.status === 401) {
         const refreshed = await verifySession();
         if (refreshed) {
-          // Retry the search
           return runSearch(q);
         } else {
           await logout(true);
@@ -593,7 +597,9 @@
         }
       }
       
-      if (!response.ok) throw new Error('API error: ' + response.status);
+      if (!response.ok) {
+        throw new Error('API error: ' + response.status);
+      }
       
       const html = await response.text();
       if (myId !== searchReqId) return;
@@ -802,7 +808,6 @@
       gateEl.style.display = 'flex';
       appEl.hidden = true;
       pwdInput.focus();
-      // Clear any stale session data
       sessionStorage.removeItem('authToken');
       sessionStorage.removeItem('sessionId');
       sessionStorage.removeItem('loginTime');
