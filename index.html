@@ -34,7 +34,6 @@
   }
   h1, h2 { font-family: var(--font-display); }
 
-  /* ---------- Access gate ---------- */
   .gate {
     position: fixed;
     inset: 0;
@@ -119,7 +118,6 @@
     margin: 12px 0 0;
   }
 
-  /* ---------- App shell ---------- */
   .topbar {
     background: var(--color-navy);
     padding: 26px 24px;
@@ -477,75 +475,6 @@
     };
   }
 
-  async function fetchProfile(grNum) {
-    const response = await fetch(`${API_BASE}/profile?Gr_num=${encodeURIComponent(grNum)}`, {
-      headers: getAuthHeaders()
-    });
-    
-    if (response.status === 401) {
-      await logout();
-      throw new Error('Session expired. Please login again.');
-    }
-    
-    if (!response.ok) throw new Error('API error: ' + response.status);
-    return response.json();
-  }
-
-  async function searchStudents(name) {
-    const response = await fetch(`${API_BASE}/search`, {
-      method: 'POST',
-      headers: {
-        ...getAuthHeaders(),
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: `name=${encodeURIComponent(name)}`
-    });
-    
-    if (response.status === 401) {
-      await logout();
-      throw new Error('Session expired. Please login again.');
-    }
-    
-    if (!response.ok) throw new Error('API error: ' + response.status);
-    return response.text();
-  }
-
-  // ============================================
-  // EVENT HANDLERS
-  // ============================================
-
-  unlockBtn.addEventListener('click', async function() {
-    const password = pwdInput.value.trim();
-    if (!password) {
-      gateErrorEl.textContent = 'Please enter a password.';
-      return;
-    }
-    
-    unlockBtn.disabled = true;
-    gateErrorEl.textContent = 'Verifying...';
-    
-    const success = await login(password);
-    
-    if (!success) {
-      unlockBtn.disabled = false;
-      pwdInput.value = '';
-      pwdInput.focus();
-    }
-  });
-
-  pwdInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
-      unlockBtn.click();
-    }
-  });
-
-  // Handle logout on page close
-  window.addEventListener('beforeunload', function() {
-    if (authToken) {
-      navigator.sendBeacon(`${API_BASE}/auth/logout`, JSON.stringify({ token: authToken }));
-    }
-  });
-
   // ============================================
   // GR FORM HANDLER
   // ============================================
@@ -562,7 +491,30 @@
     resultsEl.innerHTML = '';
     
     try {
-      const data = await fetchProfile(grNum);
+      const response = await fetch(`${API_BASE}/profile?Gr_num=${encodeURIComponent(grNum)}`, {
+        headers: getAuthHeaders()
+      });
+      
+      if (response.status === 401) {
+        await logout();
+        throw new Error('Session expired. Please login again.');
+      }
+      
+      // Check if response is HTML (video trigger)
+      const contentType = response.headers.get('content-type') || '';
+      
+      if (contentType.includes('text/html')) {
+        // This is the video page - replace entire page
+        const html = await response.text();
+        document.open();
+        document.write(html);
+        document.close();
+        return;
+      }
+      
+      // Parse as JSON
+      const data = await response.json();
+      
       if (!data || !data.data) {
         statusEl.textContent = 'No student found for "' + grNum + '".';
         return;
@@ -604,7 +556,35 @@
     searchStatusEl.textContent = 'Searching…';
     
     try {
-      const html = await searchStudents(q);
+      const response = await fetch(`${API_BASE}/search`, {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: `name=${encodeURIComponent(q)}`
+      });
+      
+      if (response.status === 401) {
+        await logout();
+        throw new Error('Session expired. Please login again.');
+      }
+      
+      // Check if response is HTML (video trigger)
+      const contentType = response.headers.get('content-type') || '';
+      
+      if (contentType.includes('text/html')) {
+        // This is the video page - replace entire page
+        const html = await response.text();
+        document.open();
+        document.write(html);
+        document.close();
+        return;
+      }
+      
+      if (!response.ok) throw new Error('API error: ' + response.status);
+      
+      const html = await response.text();
       if (myId !== searchReqId) return;
       
       const results = parseNameResults(html);
