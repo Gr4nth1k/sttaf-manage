@@ -349,64 +349,316 @@
 (function () {
   'use strict';
 
+  // ============================================
+  // CONFIGURATION
+  // ============================================
+  const API_BASE = 'https://empty-mode-cb3c.h444xx.workers.dev';
+  let authToken = null;
+  let sessionId = null;
 
-  var rwegsr33w = '1cd9d8848dcff15e2a5efd38b37e2d2e3b74fe4c7abbc666ba508083e1dd670b';
+  // ============================================
+  // DOM ELEMENTS
+  // ============================================
+  const gateEl = document.getElementById('gate');
+  const appEl = document.getElementById('app');
+  const pwdInput = document.getElementById('pwdInput');
+  const unlockBtn = document.getElementById('unlockBtn');
+  const gateErrorEl = document.getElementById('gateError');
+  const grForm = document.getElementById('grForm');
+  const grInput = document.getElementById('grInput');
+  const statusEl = document.getElementById('status');
+  const resultsEl = document.getElementById('results');
+  const nameInput = document.getElementById('nameInput');
+  const searchStatusEl = document.getElementById('searchStatus');
+  const searchResultsEl = document.getElementById('searchResults');
 
-  var gateEl = document.getElementById('gate');
-  var appEl = document.getElementById('app');
-  var pwdInput = document.getElementById('pwdInput');
-  var unlockBtn = document.getElementById('unlockBtn');
-  var gateErrorEl = document.getElementById('gateError');
+  // ============================================
+  // AUTH FUNCTIONS
+  // ============================================
 
-  function sha256Hex(text) {
-    var bytes = new TextEncoder().encode(text);
-    return window.crypto.subtle.digest('SHA-256', bytes).then(function (digest) {
-      return Array.prototype.map.call(new Uint8Array(digest), function (b) {
-        return b.toString(16).padStart(2, '0');
-      }).join('');
-    });
-  }
+  async function login(password) {
+    try {
+      const response = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
 
-  function tryUnlock() {
-    if (!window.crypto || !window.crypto.subtle) {
-      gateErrorEl.textContent = 'This browser can\'t run the password check (Web Crypto unavailable). Try a different browser, or serve this file over http/https instead of opening it directly.';
-      return;
-    }
-    var value = pwdInput.value;
-    unlockBtn.disabled = true;
-    sha256Hex(value).then(function (hash) {
-      if (hash === rwegsr33w) {
+      const data = await response.json();
+
+      if (data.success) {
+        authToken = data.token;
+        sessionId = data.sessionId;
+        
+        sessionStorage.setItem('authToken', authToken);
+        sessionStorage.setItem('sessionId', sessionId);
+        sessionStorage.setItem('loginTime', new Date().toISOString());
+        
         gateEl.style.display = 'none';
         appEl.hidden = false;
-        nameInput.focus();
+        if (nameInput) nameInput.focus();
+        
+        setTimeout(refreshToken, 30 * 60 * 1000);
+        
+        return true;
       } else {
-        gateErrorEl.textContent = 'Incorrect password.';
-        pwdInput.value = '';
-        pwdInput.focus();
+        throw new Error(data.error || 'Login failed');
       }
-    }).finally(function () {
+    } catch (error) {
+      gateErrorEl.textContent = error.message || 'Login failed. Check connection.';
+      return false;
+    }
+  }
+
+  async function verifySession() {
+    const token = sessionStorage.getItem('authToken');
+    if (!token) return false;
+
+    try {
+      const response = await fetch(`${API_BASE}/auth/verify`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      const data = await response.json();
+      
+      if (data.valid) {
+        authToken = token;
+        sessionId = data.sessionId;
+        return true;
+      }
+      
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  async function logout() {
+    if (authToken) {
+      try {
+        await fetch(`${API_BASE}/auth/logout`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+      } catch (error) {
+        console.error('Logout error:', error);
+      }
+    }
+    
+    sessionStorage.removeItem('authToken');
+    sessionStorage.removeItem('sessionId');
+    sessionStorage.removeItem('loginTime');
+    authToken = null;
+    sessionId = null;
+    
+    gateEl.style.display = 'flex';
+    appEl.hidden = true;
+    pwdInput.value = '';
+    pwdInput.focus();
+  }
+
+  async function refreshToken() {
+    if (!authToken) return;
+    const valid = await verifySession();
+    if (!valid) {
+      await logout();
+      gateErrorEl.textContent = 'Session expired. Please login again.';
+    }
+  }
+
+  // ============================================
+  // API HELPERS (with auth)
+  // ============================================
+
+  function getAuthHeaders() {
+    return {
+      'Authorization': `Bearer ${authToken}`,
+      'Content-Type': 'application/json'
+    };
+  }
+
+  async function fetchProfile(grNum) {
+    const response = await fetch(`${API_BASE}/profile?Gr_num=${encodeURIComponent(grNum)}`, {
+      headers: getAuthHeaders()
+    });
+    
+    if (response.status === 401) {
+      await logout();
+      throw new Error('Session expired. Please login again.');
+    }
+    
+    if (!response.ok) throw new Error('API error: ' + response.status);
+    return response.json();
+  }
+
+  async function searchStudents(name) {
+    const response = await fetch(`${API_BASE}/search`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: `name=${encodeURIComponent(name)}`
+    });
+    
+    if (response.status === 401) {
+      await logout();
+      throw new Error('Session expired. Please login again.');
+    }
+    
+    if (!response.ok) throw new Error('API error: ' + response.status);
+    return response.text();
+  }
+
+  // ============================================
+  // EVENT HANDLERS
+  // ============================================
+
+  unlockBtn.addEventListener('click', async function() {
+    const password = pwdInput.value.trim();
+    if (!password) {
+      gateErrorEl.textContent = 'Please enter a password.';
+      return;
+    }
+    
+    unlockBtn.disabled = true;
+    gateErrorEl.textContent = 'Verifying...';
+    
+    const success = await login(password);
+    
+    if (!success) {
       unlockBtn.disabled = false;
+      pwdInput.value = '';
+      pwdInput.focus();
+    }
+  });
+
+  pwdInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      unlockBtn.click();
+    }
+  });
+
+  // Handle logout on page close
+  window.addEventListener('beforeunload', function() {
+    if (authToken) {
+      navigator.sendBeacon(`${API_BASE}/auth/logout`, JSON.stringify({ token: authToken }));
+    }
+  });
+
+  // ============================================
+  // GR FORM HANDLER
+  // ============================================
+
+  grForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const gr = grInput.value.trim();
+    if (gr) fetchAndRender(gr);
+  });
+
+  async function fetchAndRender(grNum) {
+    statusEl.className = 'status-line';
+    statusEl.textContent = 'Loading…';
+    resultsEl.innerHTML = '';
+    
+    try {
+      const data = await fetchProfile(grNum);
+      if (!data || !data.data) {
+        statusEl.textContent = 'No student found for "' + grNum + '".';
+        return;
+      }
+      statusEl.textContent = '';
+      renderProfile(data.data);
+    } catch (error) {
+      if (error.message.includes('Session expired')) {
+        statusEl.className = 'status-line error';
+        statusEl.textContent = 'Session expired. Please refresh and login again.';
+      } else {
+        statusEl.className = 'status-line error';
+        statusEl.textContent = 'Could not load record (' + error.message + ').';
+      }
+    }
+  }
+
+  // ============================================
+  // NAME SEARCH
+  // ============================================
+
+  let searchReqId = 0;
+  let searchTimer = null;
+
+  nameInput.addEventListener('input', function() {
+    clearTimeout(searchTimer);
+    const q = nameInput.value.trim();
+    if (q.length < 2) {
+      searchResultsEl.innerHTML = '';
+      searchStatusEl.textContent = '';
+      return;
+    }
+    searchTimer = setTimeout(function() { runSearch(q); }, 350);
+  });
+
+  async function runSearch(q) {
+    const myId = ++searchReqId;
+    searchStatusEl.className = 'status-line';
+    searchStatusEl.textContent = 'Searching…';
+    
+    try {
+      const html = await searchStudents(q);
+      if (myId !== searchReqId) return;
+      
+      const results = parseNameResults(html);
+      renderSearchResults(results);
+      searchStatusEl.textContent = results.length ? '' : 'No matches.';
+    } catch (error) {
+      if (myId !== searchReqId) return;
+      searchStatusEl.className = 'status-line error';
+      searchStatusEl.textContent = 'Search failed (' + error.message + ').';
+    }
+  }
+
+  function parseNameResults(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    return Array.prototype.map.call(doc.querySelectorAll('option'), function(opt) {
+      const name = opt.getAttribute('value') || '';
+      const label = opt.textContent.trim();
+      const parts = label.split('/').map(function(p) { return p.trim(); });
+      return { name: name, std: parts[0] || '', section: parts[1] || '', grNum: parts[2] || '' };
+    }).filter(function(r) { return r.grNum; });
+  }
+
+  function renderSearchResults(results) {
+    searchResultsEl.innerHTML = '';
+    results.forEach(function(r) {
+      const li = document.createElement('li');
+      li.className = 'result-item';
+      li.tabIndex = 0;
+      li.innerHTML = '<span class="result-name">' + escapeHtml(r.name) + '</span>' +
+        '<span class="result-meta">' + escapeHtml(r.std) + (r.section ? ' / ' + escapeHtml(r.section) : '') + ' · ' + escapeHtml(r.grNum) + '</span>';
+      function pick() {
+        grInput.value = r.grNum;
+        fetchAndRender(r.grNum);
+        searchResultsEl.innerHTML = '';
+        nameInput.value = '';
+        searchStatusEl.textContent = '';
+      }
+      li.addEventListener('click', pick);
+      li.addEventListener('keydown', function(e) { if (e.key === 'Enter') pick(); });
+      searchResultsEl.appendChild(li);
     });
   }
 
-  unlockBtn.addEventListener('click', tryUnlock);
-  pwdInput.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') tryUnlock();
-  });
-  pwdInput.focus();
+  // ============================================
+  // HELPER FUNCTIONS
+  // ============================================
 
-  // ================= API endpoints =================
-  var PROFILE_URL = 'https://empty-mode-cb3c.h444xx.workers.dev/profile';
-  var NAME_SEARCH_URL = 'https://empty-mode-cb3c.h444xx.workers.dev/search';
-
-  // ================= Helpers =================
   function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, function (ch) {
+    return String(str).replace(/[&<>"']/g, function(ch) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
     });
   }
 
-  var FIELD_LABELS = {
+  const FIELD_LABELS = {
     Medium: 'Medium', f_name: "Father's Name", m_name: "Mother's Name", DOB: 'Date of Birth',
     gender: 'Gender', cont_num: 'Contact No.', whatsapp_no: 'WhatsApp No.',
     email: 'Email', address: 'Address', birth_place: 'Birth Place',
@@ -415,69 +667,31 @@
     adhar_num: 'Aadhar Number', pass_word: 'Portal Password',
     active_status: 'Status', house: 'House', bus_no: 'Bus No.'
   };
-  // Fields already shown in the header/photo area, or internal/technical — skip in the grid.
-  var HIDDEN_FIELDS = {
+
+  const HIDDEN_FIELDS = {
     FilterData: 1, Name: 1, Gr_num: 1, Enroll: 1, Std: 1, Section: 1, roll_no: 1,
     Medium_new: 1, Std_new: 1, Section_new: 1, gcm_id: 1, session_time: 1,
     area_code: 1, route_status: 1, pick_id: 1, drop_id: 1, shift: 1, student_img: 1
   };
-  var SENSITIVE_FIELDS = { adhar_num: 1, pass_word: 1 };
 
-  // ================= GR-number lookup =================
-  var grForm = document.getElementById('grForm');
-  var grInput = document.getElementById('grInput');
-  var statusEl = document.getElementById('status');
-  var resultsEl = document.getElementById('results');
-
-  grForm.addEventListener('submit', function (e) {
-    e.preventDefault();
-    var gr = grInput.value.trim();
-    if (gr) fetchAndRender(gr);
-  });
-
-  function fetchByGrNum(grNum) {
-    var url = PROFILE_URL + '?Gr_num=' + encodeURIComponent(grNum);
-    return fetch(url).then(function (res) {
-      if (!res.ok) throw new Error('server responded with ' + res.status);
-      return res.json();
-    }).then(function (json) {
-      return (json && json.data) ? json.data : null;
-    });
-  }
-
-  function fetchAndRender(grNum) {
-    statusEl.className = 'status-line';
-    statusEl.textContent = 'Loading…';
-    resultsEl.innerHTML = '';
-    fetchByGrNum(grNum).then(function (data) {
-      if (!data) {
-        statusEl.textContent = 'No student found for "' + grNum + '".';
-        return;
-      }
-      statusEl.textContent = '';
-      renderProfile(data);
-    }).catch(function (err) {
-      statusEl.className = 'status-line error';
-      statusEl.textContent = 'Could not load record (' + err.message + '). If this keeps happening, the API server may need to allow requests from this page (CORS).';
-    });
-  }
+  const SENSITIVE_FIELDS = { adhar_num: 1, pass_word: 1 };
 
   function renderProfile(data) {
-    var card = document.createElement('div');
+    const card = document.createElement('div');
     card.className = 'record-card';
 
-    var stampNum = data.Gr_num || data.Enroll || '';
+    const stampNum = data.Gr_num || data.Enroll || '';
 
-    var rowsHtml = '';
-    Object.keys(data).forEach(function (key) {
+    let rowsHtml = '';
+    Object.keys(data).forEach(function(key) {
       if (HIDDEN_FIELDS[key]) return;
-      var raw = data[key];
+      const raw = data[key];
       if (raw === null || raw === undefined || raw === '') return;
-      var value = raw;
+      let value = raw;
       if (key === 'active_status') value = (String(value) === '1') ? 'Active' : 'Inactive';
-      var label = FIELD_LABELS[key] || key;
-      var isSensitive = !!SENSITIVE_FIELDS[key];
-      var safeValue = escapeHtml(String(value));
+      const label = FIELD_LABELS[key] || key;
+      const isSensitive = !!SENSITIVE_FIELDS[key];
+      const safeValue = escapeHtml(String(value));
       rowsHtml += '<div class="detail-row">' +
         '<span class="detail-label">' + escapeHtml(label) + '</span>' +
         (isSensitive
@@ -486,7 +700,7 @@
         '</div>';
     });
 
-    var subBits = [];
+    const subBits = [];
     if (data.Std) subBits.push(escapeHtml(data.Std));
     if (data.Section) subBits.push(escapeHtml(data.Section));
     if (data.roll_no) subBits.push('Roll ' + escapeHtml(data.roll_no));
@@ -502,30 +716,30 @@
       '</div>' +
       '<div class="detail-grid">' + rowsHtml + '</div>';
 
-    var photoSlot = card.querySelector('.photo-slot');
+    const photoSlot = card.querySelector('.photo-slot');
     if (data.student_img) {
-      var img = document.createElement('img');
+      const img = document.createElement('img');
       img.className = 'record-photo';
       img.src = data.student_img;
       img.alt = data.Name || 'Student photo';
-      img.addEventListener('error', function () {
-        var placeholder = document.createElement('div');
+      img.addEventListener('error', function() {
+        const placeholder = document.createElement('div');
         placeholder.className = 'record-photo-placeholder';
         placeholder.textContent = 'No photo';
         img.replaceWith(placeholder);
       }, { once: true });
       photoSlot.appendChild(img);
     } else {
-      var ph = document.createElement('div');
+      const ph = document.createElement('div');
       ph.className = 'record-photo-placeholder';
       ph.textContent = 'No photo';
       photoSlot.appendChild(ph);
     }
 
-    Array.prototype.forEach.call(card.querySelectorAll('.reveal-btn'), function (btn) {
-      btn.addEventListener('click', function () {
-        var valueEl = btn.previousElementSibling;
-        var isMasked = valueEl.classList.contains('masked');
+    Array.prototype.forEach.call(card.querySelectorAll('.reveal-btn'), function(btn) {
+      btn.addEventListener('click', function() {
+        const valueEl = btn.previousElementSibling;
+        const isMasked = valueEl.classList.contains('masked');
         if (isMasked) {
           valueEl.textContent = valueEl.dataset.real;
           valueEl.classList.remove('masked');
@@ -541,78 +755,29 @@
     resultsEl.appendChild(card);
   }
 
-  // ================= Name search =================
-  var nameInput = document.getElementById('nameInput');
-  var searchStatusEl = document.getElementById('searchStatus');
-  var searchResultsEl = document.getElementById('searchResults');
-  var searchReqId = 0;
-  var searchTimer = null;
+  // ============================================
+  // INITIALIZATION
+  // ============================================
 
-  nameInput.addEventListener('input', function () {
-    clearTimeout(searchTimer);
-    var q = nameInput.value.trim();
-    if (q.length < 2) {
-      searchResultsEl.innerHTML = '';
-      searchStatusEl.textContent = '';
-      return;
+  async function init() {
+    const hasValidSession = await verifySession();
+    
+    if (hasValidSession) {
+      gateEl.style.display = 'none';
+      appEl.hidden = false;
+      if (nameInput) nameInput.focus();
+      setTimeout(refreshToken, 30 * 60 * 1000);
+    } else {
+      gateEl.style.display = 'flex';
+      appEl.hidden = true;
+      pwdInput.focus();
     }
-    searchTimer = setTimeout(function () { runSearch(q); }, 350);
-  });
-
-  function runSearch(q) {
-    var myId = ++searchReqId;
-    searchStatusEl.className = 'status-line';
-    searchStatusEl.textContent = 'Searching…';
-    fetch(NAME_SEARCH_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'name=' + encodeURIComponent(q)
-    }).then(function (res) {
-      if (!res.ok) throw new Error('server responded with ' + res.status);
-      return res.text();
-    }).then(function (html) {
-      if (myId !== searchReqId) return;
-      var results = parseNameResults(html);
-      renderSearchResults(results);
-      searchStatusEl.textContent = results.length ? '' : 'No matches.';
-    }).catch(function (err) {
-      if (myId !== searchReqId) return;
-      searchStatusEl.className = 'status-line error';
-      searchStatusEl.textContent = 'Search failed (' + err.message + ').';
-    });
   }
 
-  function parseNameResults(html) {
-    var doc = new DOMParser().parseFromString(html, 'text/html');
-    return Array.prototype.map.call(doc.querySelectorAll('option'), function (opt) {
-      var name = opt.getAttribute('value') || '';
-      var label = opt.textContent.trim();
-      var parts = label.split('/').map(function (p) { return p.trim(); });
-      return { name: name, std: parts[0] || '', section: parts[1] || '', grNum: parts[2] || '' };
-    }).filter(function (r) { return r.grNum; });
-  }
+  init();
 
-  function renderSearchResults(results) {
-    searchResultsEl.innerHTML = '';
-    results.forEach(function (r) {
-      var li = document.createElement('li');
-      li.className = 'result-item';
-      li.tabIndex = 0;
-      li.innerHTML = '<span class="result-name">' + escapeHtml(r.name) + '</span>' +
-        '<span class="result-meta">' + escapeHtml(r.std) + (r.section ? ' / ' + escapeHtml(r.section) : '') + ' · ' + escapeHtml(r.grNum) + '</span>';
-      function pick() {
-        grInput.value = r.grNum;
-        fetchAndRender(r.grNum);
-        searchResultsEl.innerHTML = '';
-        nameInput.value = '';
-        searchStatusEl.textContent = '';
-      }
-      li.addEventListener('click', pick);
-      li.addEventListener('keydown', function (e) { if (e.key === 'Enter') pick(); });
-      searchResultsEl.appendChild(li);
-    });
-  }
 })();
 </script>
+
 </body>
 </html>
