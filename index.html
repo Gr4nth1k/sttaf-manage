@@ -1142,10 +1142,10 @@
   // ============================================
   // FIXED BUTTON HANDLER WITH BETTER ERROR HANDLING
   // ============================================
-
-  unlockBtn.addEventListener('click', async function() {
+  // Fix the button click handler - Direct implementation
+  unlockBtn.addEventListener('click', function() {
     const password = pwdInput.value.trim();
-    console.log('🔑 Unlock button clicked');
+    console.log('🔑 Unlock button clicked - DIRECT HANDLER');
     console.log('📝 Password entered:', password ? 'Yes (length: ' + password.length + ')' : 'No');
     
     if (!password) {
@@ -1154,47 +1154,57 @@
     }
     
     // Disable button and show loading state
-    unlockBtn.disabled = true;
-    unlockBtn.textContent = 'Verifying...';
+    this.disabled = true;
+    this.textContent = 'Verifying...';
     gateErrorEl.textContent = '⏳ Contacting server...';
     gateErrorEl.style.color = '#D8B968';
     
-    try {
-      const success = await login(password);
-      console.log('✅ Login result:', success);
+    // Direct fetch - bypass the login function
+    fetch('https://empty-mode-cb3c.h444xx.workers.dev/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: password })
+    })
+    .then(response => response.json())
+    .then(data => {
+      console.log('📝 Login response:', data);
       
-      if (success) {
-        // Success - hide gate, show app
+      if (data.success) {
+        // ✅ Login successful
+        console.log('✅ Login successful!');
+        
+        // Store the token
+        sessionStorage.setItem('authToken', data.token);
+        sessionStorage.setItem('sessionId', data.sessionId);
+        sessionStorage.setItem('loginTime', new Date().toISOString());
+        
+        // Update global variables
+        authToken = data.token;
+        sessionId = data.sessionId;
+        
+        // Hide gate, show app
         gateEl.style.display = 'none';
         appEl.hidden = false;
         if (nameInput) nameInput.focus();
-        gateErrorEl.style.color = '#E39A9A';
         gateErrorEl.textContent = '';
-      } else {
-        // Failed - re-enable button
-        unlockBtn.disabled = false;
-        unlockBtn.textContent = 'Unlock';
-        pwdInput.value = '';
-        pwdInput.focus();
         gateErrorEl.style.color = '#E39A9A';
-        // Error message is set by the login function
+        
+        // Re-enable button
+        this.disabled = false;
+        this.textContent = 'Unlock';
+      } else {
+        throw new Error(data.error || 'Login failed');
       }
-    } catch (error) {
-      console.error('❌ Unexpected error:', error);
-      gateErrorEl.textContent = 'Error: ' + (error.message || 'Unknown error');
+    })
+    .catch(error => {
+      console.error('❌ Login error:', error);
+      gateErrorEl.textContent = 'Error: ' + (error.message || 'Login failed');
       gateErrorEl.style.color = '#E39A9A';
-      unlockBtn.disabled = false;
-      unlockBtn.textContent = 'Unlock';
-    }
-  });
-
-  // Enter key handler
-  pwdInput.addEventListener('keydown', function(e) {
-    console.log('⌨️ Key pressed in password field:', e.key);
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      unlockBtn.click();
-    }
+      this.disabled = false;
+      this.textContent = 'Unlock';
+      pwdInput.value = '';
+      pwdInput.focus();
+    });
   });
 
   // ============================================
