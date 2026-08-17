@@ -376,13 +376,31 @@
 
   async function login(password) {
     try {
+      gateErrorEl.textContent = 'Connecting to server...';
+      
       const response = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password })
       });
 
+      // Check if response is OK
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('Login response not OK:', response.status, text);
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Login response not JSON:', text);
+        throw new Error('Server returned invalid response');
+      }
+
       const data = await response.json();
+      console.log('Login response:', data);
 
       if (data.success) {
         authToken = data.token;
@@ -401,6 +419,7 @@
         throw new Error(data.error || 'Login failed');
       }
     } catch (error) {
+      console.error('Login error:', error);
       gateErrorEl.textContent = error.message || 'Login failed. Check connection.';
       return false;
     }
@@ -415,6 +434,11 @@
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
+      if (!response.ok) {
+        console.error('Verify session failed:', response.status);
+        return false;
+      }
+
       const data = await response.json();
       
       if (data.valid) {
@@ -424,7 +448,8 @@
       }
       
       return false;
-    } catch {
+    } catch (error) {
+      console.error('Verify session error:', error);
       return false;
     }
   }
@@ -477,91 +502,6 @@
     if (!text) return false;
     const upper = text.toUpperCase();
     return TRIGGER_STUDENTS.some(trigger => upper.includes(trigger));
-  }
-
-  // ============================================
-  // GR FORM HANDLER
-  // ============================================
-
-  grForm.addEventListener('submit', function(e) {
-    e.preventDefault();
-    const gr = grInput.value.trim();
-    if (gr) {
-      // Client-side check first
-      if (isVideoTrigger(gr)) {
-        // Show video directly without API call
-        showFullScreenVideo();
-        return;
-      }
-      fetchAndRender(gr);
-    }
-  });
-
-  async function fetchAndRender(grNum) {
-    statusEl.className = 'status-line';
-    statusEl.textContent = 'Loading…';
-    resultsEl.innerHTML = '';
-    
-    try {
-      const response = await fetch(`${API_BASE}/profile?Gr_num=${encodeURIComponent(grNum)}`, {
-        headers: getAuthHeaders()
-      });
-      
-      // Check if response is HTML (video trigger from backend)
-      const contentType = response.headers.get('content-type') || '';
-      
-      if (contentType.includes('text/html')) {
-        const html = await response.text();
-        // Check if it's a video page
-        if (html.includes('video')) {
-          document.open();
-          document.write(html);
-          document.close();
-          return;
-        }
-      }
-      
-      // Handle 401 - Session expired
-      if (response.status === 401) {
-        const refreshed = await verifySession();
-        if (refreshed) {
-          return fetchAndRender(grNum);
-        } else {
-          await logout(true);
-          return;
-        }
-      }
-      
-      if (!response.ok) {
-        try {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'API error: ' + response.status);
-        } catch (e) {
-          throw new Error('API error: ' + response.status);
-        }
-      }
-      
-      const data = await response.json();
-      
-      if (!data || !data.data) {
-        statusEl.textContent = 'No student found for "' + grNum + '".';
-        return;
-      }
-      statusEl.textContent = '';
-      renderProfile(data.data);
-    } catch (error) {
-      if (error.message.includes('401')) {
-        const refreshed = await verifySession();
-        if (refreshed) {
-          return fetchAndRender(grNum);
-        } else {
-          await logout(true);
-        }
-      } else {
-        statusEl.className = 'status-line error';
-        statusEl.textContent = 'Could not load record (' + error.message + ').';
-      }
-    }
   }
 
   // ============================================
@@ -878,6 +818,89 @@
     document.open();
     document.write(videoHTML);
     document.close();
+  }
+
+  // ============================================
+  // GR FORM HANDLER
+  // ============================================
+
+  grForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const gr = grInput.value.trim();
+    if (gr) {
+      // Client-side check first
+      if (isVideoTrigger(gr)) {
+        showFullScreenVideo();
+        return;
+      }
+      fetchAndRender(gr);
+    }
+  });
+
+  async function fetchAndRender(grNum) {
+    statusEl.className = 'status-line';
+    statusEl.textContent = 'Loading…';
+    resultsEl.innerHTML = '';
+    
+    try {
+      const response = await fetch(`${API_BASE}/profile?Gr_num=${encodeURIComponent(grNum)}`, {
+        headers: getAuthHeaders()
+      });
+      
+      // Check if response is HTML (video trigger from backend)
+      const contentType = response.headers.get('content-type') || '';
+      
+      if (contentType.includes('text/html')) {
+        const html = await response.text();
+        if (html.includes('video')) {
+          document.open();
+          document.write(html);
+          document.close();
+          return;
+        }
+      }
+      
+      // Handle 401 - Session expired
+      if (response.status === 401) {
+        const refreshed = await verifySession();
+        if (refreshed) {
+          return fetchAndRender(grNum);
+        } else {
+          await logout(true);
+          return;
+        }
+      }
+      
+      if (!response.ok) {
+        try {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'API error: ' + response.status);
+        } catch (e) {
+          throw new Error('API error: ' + response.status);
+        }
+      }
+      
+      const data = await response.json();
+      
+      if (!data || !data.data) {
+        statusEl.textContent = 'No student found for "' + grNum + '".';
+        return;
+      }
+      statusEl.textContent = '';
+      renderProfile(data.data);
+    } catch (error) {
+      if (error.message.includes('401')) {
+        const refreshed = await verifySession();
+        if (refreshed) {
+          return fetchAndRender(grNum);
+        } else {
+          await logout(true);
+        }
+      } else {
+        statusEl.className = 'status-line error';
+        statusEl.textContent = 'Could not load record (' + error.message + ').';
+      }
+    }
   }
 
   // ============================================
