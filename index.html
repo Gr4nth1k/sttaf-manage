@@ -2087,164 +2087,141 @@
         }
       );
 
+    async function runSearch(q) {
 
-      async function runSearch(q) {
+  const myId = ++searchReqId;
 
-        const myId =
-          ++searchReqId;
+  searchStatusEl.className = 'status-line';
+  searchStatusEl.textContent = 'Searching...';
 
+  try {
 
-        searchStatusEl.className =
-          'status-line';
+    const response = await fetch(
+      API_BASE + '/search',
+      {
+        method: 'POST',
 
-        searchStatusEl.textContent =
-          'Searching...';
+        headers: {
+          'Authorization': 'Bearer ' + authToken,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
 
+        body: 'name=' + encodeURIComponent(q)
+      }
+    );
 
-        try {
+    console.log('Search HTTP status:', response.status);
 
-          const response =
-            await fetch(
-              API_BASE + '/search',
-              {
-                method: 'POST',
+    /*
+     * Read the response body ONLY ONCE.
+     */
+    const responseText = await response.text();
 
-                headers: {
-                  'Authorization':
-                    'Bearer ' +
-                    authToken,
-
-                  'Content-Type':
-                    'application/x-www-form-urlencoded'
-                },
-
-                body:
-                  'name=' +
-                  encodeURIComponent(q)
-              }
-            );
+    console.log('Search response:', responseText);
 
 
-          if (response.status === 401) {
+    /*
+     * Session expired
+     */
+    if (response.status === 401) {
 
-            const refreshed =
-              await verifySession();
+      const refreshed = await verifySession();
 
-
-            if (refreshed) {
-
-              return runSearch(q);
-
-            }
-
-
-            await logout(true);
-
-            return;
-
-          }
-
-
-          const contentType =
-            response.headers.get(
-              'content-type'
-            ) || '';
-
-
-          if (
-            contentType.includes(
-              'text/html'
-            )
-          ) {
-
-            const html =
-              await response.text();
-
-
-            if (
-              html
-                .toLowerCase()
-                .includes('video')
-            ) {
-
-              document.open();
-
-              document.write(html);
-
-              document.close();
-
-              return;
-
-            }
-
-          }
-
-
-          if (!response.ok) {
-
-            throw new Error(
-              'API error: ' +
-              response.status
-            );
-
-          }
-
-
-          const html =
-            await response.text();
-
-
-          if (myId !== searchReqId) {
-            return;
-          }
-
-
-          const results =
-            parseNameResults(html);
-
-
-          renderSearchResults(
-            results
-          );
-
-
-          searchStatusEl.textContent =
-            results.length
-              ? ''
-              : 'No matches.';
-
-
-        } catch (error) {
-
-          if (
-            myId !== searchReqId
-          ) {
-
-            return;
-
-          }
-
-
-          console.error(
-            'Search error:',
-            error
-          );
-
-
-          searchStatusEl.className =
-            'status-line error';
-
-
-          searchStatusEl.textContent =
-            'Search failed (' +
-            error.message +
-            ').';
-
-        }
-
+      if (refreshed) {
+        return runSearch(q);
       }
 
+      await logout(true);
+      return;
+    }
 
+
+    /*
+     * Check whether the server returned
+     * an HTML video page.
+     */
+    const contentType =
+      response.headers.get('content-type') || '';
+
+    if (
+      contentType.includes('text/html') &&
+      responseText.toLowerCase().includes('video')
+    ) {
+
+      document.open();
+      document.write(responseText);
+      document.close();
+
+      return;
+    }
+
+
+    /*
+     * API error
+     */
+    if (!response.ok) {
+
+      throw new Error(
+        'API error: ' + response.status
+      );
+
+    }
+
+
+    /*
+     * Ignore outdated search responses.
+     */
+    if (myId !== searchReqId) {
+      return;
+    }
+
+
+    /*
+     * Parse the response returned by the API.
+     */
+    const results =
+      parseNameResults(responseText);
+
+
+    console.log(
+      'Parsed search results:',
+      results
+    );
+
+
+    /*
+     * Display the results.
+     */
+    renderSearchResults(results);
+
+
+    searchStatusEl.textContent =
+      results.length
+        ? ''
+        : 'No matches.';
+
+
+  } catch (error) {
+
+    if (myId !== searchReqId) {
+      return;
+    }
+
+    console.error(
+      'Search error:',
+      error
+    );
+
+    searchStatusEl.className =
+      'status-line error';
+
+    searchStatusEl.textContent =
+      'Search failed (' +
+      error.message +
+      ').';
+  }
+}
+    
       /* =========================================
          PARSE NAME SEARCH
       ========================================== */
