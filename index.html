@@ -1139,74 +1139,96 @@
     resultsEl.appendChild(card);
   }
 
-  // ============================================
-  // FIXED BUTTON HANDLER WITH BETTER ERROR HANDLING
-  // ============================================
-  // Fix the button click handler - Direct implementation
-  unlockBtn.addEventListener('click', function() {
+        // ============================================
+// FIXED BUTTON HANDLER - SIMPLIFIED
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+  // Get elements again to ensure they exist
+  const unlockBtn = document.getElementById('unlockBtn');
+  const pwdInput = document.getElementById('pwdInput');
+  const gateErrorEl = document.getElementById('gateError');
+  const gateEl = document.getElementById('gate');
+  const appEl = document.getElementById('app');
+  const nameInput = document.getElementById('nameInput');
+  
+  // Clear any existing listeners by cloning
+  const newBtn = unlockBtn.cloneNode(true);
+  unlockBtn.parentNode.replaceChild(newBtn, unlockBtn);
+  
+  // Add fresh event listener
+  newBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    console.log('🔑 Unlock button clicked');
+    
     const password = pwdInput.value.trim();
-    console.log('🔑 Unlock button clicked - DIRECT HANDLER');
-    console.log('📝 Password entered:', password ? 'Yes (length: ' + password.length + ')' : 'No');
+    console.log('📝 Password length:', password.length);
     
     if (!password) {
       gateErrorEl.textContent = 'Please enter a password.';
       return;
     }
     
-    // Disable button and show loading state
+    // Show loading state
     this.disabled = true;
     this.textContent = 'Verifying...';
-    gateErrorEl.textContent = '⏳ Contacting server...';
+    gateErrorEl.textContent = '⏳ Checking credentials...';
     gateErrorEl.style.color = '#D8B968';
     
-    // Direct fetch - bypass the login function
+    // Make the API call
     fetch('https://empty-mode-cb3c.h444xx.workers.dev/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: password })
     })
-    .then(response => response.json())
+    .then(response => {
+      console.log('📨 Response status:', response.status);
+      return response.json();
+    })
     .then(data => {
-      console.log('📝 Login response:', data);
+      console.log('📝 Response data:', data);
       
-      if (data.success) {
-        // ✅ Login successful
-        console.log('✅ Login successful!');
-        
-        // Store the token
+      if (data.success && data.token) {
+        // Store tokens
         sessionStorage.setItem('authToken', data.token);
-        sessionStorage.setItem('sessionId', data.sessionId);
-        sessionStorage.setItem('loginTime', new Date().toISOString());
+        sessionStorage.setItem('sessionId', data.sessionId || 'session-' + Date.now());
         
         // Update global variables
-        authToken = data.token;
-        sessionId = data.sessionId;
+        window.authToken = data.token;
+        window.sessionId = data.sessionId;
         
-        // Hide gate, show app
+        // Show the app
         gateEl.style.display = 'none';
         appEl.hidden = false;
-        if (nameInput) nameInput.focus();
         gateErrorEl.textContent = '';
-        gateErrorEl.style.color = '#E39A9A';
         
-        // Re-enable button
-        this.disabled = false;
-        this.textContent = 'Unlock';
+        if (nameInput) nameInput.focus();
+        console.log('✅ Login successful!');
       } else {
-        throw new Error(data.error || 'Login failed');
+        throw new Error(data.error || data.message || 'Invalid credentials');
       }
     })
     .catch(error => {
       console.error('❌ Login error:', error);
-      gateErrorEl.textContent = 'Error: ' + (error.message || 'Login failed');
+      gateErrorEl.textContent = error.message || 'Login failed. Please try again.';
       gateErrorEl.style.color = '#E39A9A';
-      this.disabled = false;
-      this.textContent = 'Unlock';
       pwdInput.value = '';
       pwdInput.focus();
+    })
+    .finally(() => {
+      this.disabled = false;
+      this.textContent = 'Unlock';
     });
   });
-
+  
+  // Also allow Enter key on password field
+  pwdInput.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      newBtn.click();
+    }
+  });
+});
+  
   // ============================================
   // INITIALIZATION
   // ============================================
